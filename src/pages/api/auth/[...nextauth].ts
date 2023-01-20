@@ -18,6 +18,9 @@ export const authOptions: AuthOptions = {
       },
     }),
   ],
+  theme: {
+    colorScheme: 'light',
+  },
   callbacks: {
     jwt: ({ token, account }) => {
       if (account?.access_token) {

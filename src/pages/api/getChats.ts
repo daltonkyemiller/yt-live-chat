@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     broadcastStatus: 'active',
   });
   const liveId = currentBroadcasts?.data.items?.[0]?.snippet?.liveChatId;
-  if (!liveId) return res.status(404).json({ error: 'No live chat found' });
+  if (!liveId) return res.status(404).json('No live chat found');
 
   const chat = await youtube({ version: 'v3', auth }).liveChatMessages.list({
     part: ['snippet', 'authorDetails'],

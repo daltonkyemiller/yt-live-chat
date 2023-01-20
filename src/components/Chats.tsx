@@ -1,7 +1,10 @@
 'use client';
 import { LiveChatMessage } from '@/utils/types/youtube';
-import { useEffect, useState } from 'react';
-
+import { useEffect, useRef, useState } from 'react';
+import { signOut } from 'next-auth/react';
+import { requestWrapper } from '@/utils/misc';
+import Image from 'next/image';
+import { motion } from 'framer-motion';
 const addressRegex = /^(\d+) ?([A-Za-z](?= ))? (.*?) ([^ ]+?) ?((?<= )APT)? ?((?<= )\d*)?$/;
 
 const chatsMock: LiveChatMessage[] = [
@@ -304,28 +307,48 @@ const chatsMock: LiveChatMessage[] = [
   },
 ];
 
-export default function Chats({ googleToken }: { googleToken: string }) {
-  // const [chats, setChats] = useState<LiveChatMessage[]>([]);
-  // useEffect(() => {
-  //   let interval: NodeJS.Timeout;
-  //   const fetchChats = async () => {
-  //     const data = await (await fetch(`/api/getChats?token=${googleToken}`)).json();
-  //     setChats(data);
-  //   };
-  //   void fetchChats();
-  //   setInterval(async () => void fetchChats(), 15000);
-  //
-  //   return () => clearInterval(interval);
-  // }, [googleToken]);
+const MAX_TRIES = 5;
 
-  const { chatsWithAddress, restChats } = chatsMock.reduceRight(
+export default function Chats({ googleToken }: { googleToken: string }) {
+  const [chats, setChats] = useState<LiveChatMessage[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [tries, setTries] = useState(0);
+  const interval = useRef<NodeJS.Timeout | undefined>(undefined);
+  if (tries >= MAX_TRIES) void signOut();
+
+  useEffect(() => {
+    const fetchChats = async () => {
+      requestWrapper<LiveChatMessage[]>(`/api/getChats?token=${googleToken}`)
+        .then((data) => {
+          setChats(data);
+          setError(null);
+        })
+        .catch((err) => {
+          setError(err.message);
+          setTries((prev) => prev + 1);
+        });
+    };
+    void fetchChats();
+    interval.current = setInterval(async () => void fetchChats(), 3000);
+
+    return () => clearInterval(interval.current);
+  }, [googleToken, interval]);
+
+  if (error)
+    return (
+      <section className="flex justify-center text-red-500">
+        {error} - {MAX_TRIES - tries} tries left
+      </section>
+    );
+  if (!chats.length) return <section className="flex justify-center">Loading Chats...</section>;
+
+  const { chatsWithAddress, restChats } = chats.reduceRight(
     (acc, chat) => {
       const { displayMessage } = chat.snippet;
-      if (displayMessage.match(addressRegex)) {
-        acc.chatsWithAddress.push(chat);
-      } else {
-        acc.restChats.push(chat);
-      }
+
+      if (displayMessage.match(addressRegex)) acc.chatsWithAddress.push(chat);
+      else acc.restChats.push(chat);
+
       return acc;
     },
     { chatsWithAddress: [], restChats: [] } as { chatsWithAddress: LiveChatMessage[]; restChats: LiveChatMessage[] },
@@ -355,12 +378,17 @@ export default function Chats({ googleToken }: { googleToken: string }) {
 
 function ChatMessage({ chat, isAddress, idx }: { chat: LiveChatMessage; isAddress: boolean; idx: number }) {
   return (
-    <div className="relative flex items-center gap-2 border-2 border-dark p-3">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      layout
+      className="relative flex w-[400px] items-center gap-2 border-2 border-dark bg-neutral-100 p-3 ">
       {idx === 0 && (
         <div className="absolute top-0 right-0 z-[9999]  border-l-2 border-b-2 border-dark bg-yellow-500 p-2">new</div>
       )}
-      <div className="h-[50px] w-[50px] overflow-hidden rounded-full">
-        <img
+      <div className="relative h-[50px] w-[50px] overflow-hidden rounded-full">
+        <Image
+          fill
           src={chat.authorDetails.profileImageUrl}
           alt={`Image of ${chat.authorDetails.displayName}`}
           className="object-fit h-full w-full object-center"
@@ -380,6 +408,6 @@ function ChatMessage({ chat, isAddress, idx }: { chat: LiveChatMessage; isAddres
           <p>{chat.snippet.displayMessage}</p>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
